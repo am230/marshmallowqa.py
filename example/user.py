@@ -8,9 +8,8 @@ async def main():
     marshmallow = await Marshmallow.from_cookies(
         cookies=cookies["edge"],
     )
-    messages = await marshmallow.fetch_messages()
-    detail = await messages[0].fetch_detail(marshmallow)
-    await detail.reply(marshmallow, "あいうえお")
+    user = await marshmallow.fetch_user()
+    print(user)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,16 @@ BASE_HEADERS = {
 }
 
 
+class User(BaseModel):
+    name: str
+    screen_name: str
+    image: str
+
+    @property
+    def url(self) -> str:
+        return f"https://marshmallow-qa.com/{self.name}"
+
+
 class Marshmallow:
     def __init__(
         self,
@@ -47,6 +57,41 @@ class Marshmallow:
             cookies=cookies,
             scrf_token=csrf_token.attrs["content"],
         )
+
+    async def close(self) -> None:
+        await self.client.close()
+
+    async def fetch_user(self) -> User:
+        response = await self.client.get(
+            "https://marshmallow-qa.com/",
+            cookies=self.cookies.model_dump(by_alias=True),
+            headers=BASE_HEADERS,
+        )
+        response.raise_for_status()
+        user_id = response.url.path.split("/")[1]
+        response = await self.client.get(
+            "https://marshmallow-qa.com/settings/profile",
+            cookies=self.cookies.model_dump(by_alias=True),
+            headers=BASE_HEADERS,
+        )
+        response.raise_for_status()
+        soup = bs4.BeautifulSoup(await response.text(), "html.parser")
+        form = soup.select_one('form[id^="edit_user"]')
+        if form is None:
+            raise ValueError("Form not found")
+        name_input = form.select_one('input[id="user_nickname"][name="user[nickname]"]')
+        if name_input is None:
+            raise ValueError("Name input not found")
+        screen_name = name_input.attrs["value"]
+        image = form.select_one("picture > img")
+        if image is None:
+            raise ValueError("Image not found")
+        user = User(
+            name=user_id,
+            screen_name=screen_name,
+            image=image.attrs["src"],
+        )
+        return user
 
     async def fetch_messages(self) -> list[Message]:
         response = await self.client.get(
