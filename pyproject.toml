@@ -26,4 +26,4 @@ dev-dependencies = ["requests>=2.32.3", "pyright>=1.1.369"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/marshmallowpy"]
+packages = ["src/marshmallowqa"]
