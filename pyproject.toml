@@ -1,0 +1,32 @@
+[project]
+name = "marshmallow.py"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "2.30am", email = "111672334+am230@users.noreply.github.com" },
+]
+dependencies = [
+    "rookiepy>=0.5.1",
+    "beautifulsoup4>=4.12.3",
+    "aiohttp>=3.9.5",
+    "pydantic>=2.7.4",
+]
+readme = "README.md"
+requires-python = ">= 3.8"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = [
+    "requests>=2.32.3",
+    "pyright>=1.1.369",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marshmallow"]
