@@ -1,6 +1,6 @@
 import asyncio
 
-from marshmallowpy import Marshmallow, retrieve_cookies
+from marshmallowqa import Marshmallow, retrieve_cookies
 
 
 async def main():

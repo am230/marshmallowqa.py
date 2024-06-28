@@ -1,5 +1,5 @@
 [project]
-name = "marshmallowpy"
+name = "marshmallowqa.py"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
