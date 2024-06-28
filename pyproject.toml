@@ -1,5 +1,5 @@
 [project]
-name = "marshmallow.py"
+name = "marshmallowpy"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -20,13 +20,10 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "requests>=2.32.3",
-    "pyright>=1.1.369",
-]
+dev-dependencies = ["requests>=2.32.3", "pyright>=1.1.369"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/marshmallow"]
+packages = ["src/marshmallowpy"]
