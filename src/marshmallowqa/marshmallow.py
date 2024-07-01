@@ -213,10 +213,6 @@ class Message(BaseModel):
     def acknowledged(self) -> bool:
         return self.acknowledge_action.delete
 
-
-class MessageDetail(Message):
-    reply_action: Action | None
-
     async def block(self, marshmallow: MarshmallowSession) -> None:
         block = await marshmallow.client.get(
             f"https://marshmallow-qa.com/messages/{self.message_id}/block/new",
@@ -230,6 +226,10 @@ class MessageDetail(Message):
             raise ValueError("Form not found")
         action = Action.from_form(form)
         await action.set(marshmallow)
+
+
+class MessageDetail(Message):
+    reply_action: Action | None
 
     async def reply(self, marshmallow: MarshmallowSession, content: str) -> None:
         if self.reply_action is None:
