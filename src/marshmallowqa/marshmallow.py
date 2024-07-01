@@ -227,17 +227,36 @@ class Message(BaseModel):
         action = Action.from_form(form)
         await action.set(marshmallow)
 
+    async def try_edit_reply(
+        self, marshmallow: MarshmallowSession, content: str
+    ) -> None:
+        action = Action(
+            action=f"/messages/{self.message_id}/answers",
+            token="",
+            delete=False,
+        )
+        await action.set(
+            marshmallow,
+            data={
+                "answer[message_uuid]": self.message_id,
+                "answer[content]": content,
+                "answer[skip_tweet_confirmation]": "on",
+                "destination": "the_others",
+                "answer[publish_method]": "clipboard",
+            },
+        )
+
 
 class MessageDetail(Message):
     reply_action: Action | None
 
     @property
     def replied(self) -> bool:
-        return self.reply_action is not None
+        return self.reply_action is None
 
     async def reply(self, marshmallow: MarshmallowSession, content: str) -> None:
         if self.reply_action is None:
-            raise ValueError("Reply action not found")
+            raise ValueError("Message already replied")
         await self.reply_action.set(
             marshmallow,
             delete=False,
