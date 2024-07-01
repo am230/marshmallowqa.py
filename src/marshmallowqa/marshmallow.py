@@ -129,18 +129,16 @@ class MarshmallowSession:
             raise ValueError("Form not found")
         method_input = form.select_one('input[name="_method"]')
         liked = method_input is not None and method_input.attrs["value"] == "delete"
-        token_input = form.select_one('input[name="authenticity_token"]')
-        if token_input is None:
-            raise ValueError("Authenticity token not found")
-        like_token = token_input.attrs["value"]
+        like_token = parse_form_token(form)
         answer_form = card.select_one("#new_answer")
         if answer_form is None:
             reply_token = None
         else:
-            token_input = answer_form.select_one('input[name="authenticity_token"]')
-            if token_input is None:
-                raise ValueError("Authenticity token not found")
-            reply_token = token_input.attrs["value"]
+            reply_token = parse_form_token(answer_form)
+        acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
+        if acknowledgement_form is None:
+            raise ValueError("Acknowledgement form not found")
+        acknowledgement_token = parse_form_token(acknowledgement_form)
         message = MessageDetail(
             message_id=message_id,
             liked=liked,
@@ -148,6 +146,7 @@ class MarshmallowSession:
             content=card_content,
             like_token=like_token,
             reply_token=reply_token,
+            acknowledgement_token=acknowledgement_token,
         )
         return message
 
@@ -155,15 +154,16 @@ class MarshmallowSession:
         message_id = self._parse_message_id(
             item.attrs["data-obscene-word-raw-content-path-value"]
         )
-        form = item.select_one('form[action$="/like"]')
-        if form is None:
+        like_form = item.select_one('form[action$="/like"]')
+        if like_form is None:
             raise ValueError("Form not found")
-        method_input = form.select_one('input[name="_method"]')
+        method_input = like_form.select_one('input[name="_method"]')
         liked = method_input is not None and method_input.attrs["value"] == "delete"
-        token_input = form.select_one('input[name="authenticity_token"]')
-        if token_input is None:
-            raise ValueError("Authenticity token not found")
-        authenticity_token = token_input.attrs["value"]
+        like_token = parse_form_token(like_form)
+        acknowledgement_form = item.select_one('form[action*="/acknowledgement"]')
+        if acknowledgement_form is None:
+            raise ValueError("Acknowledgement form not found")
+        acknowledgement_token = parse_form_token(acknowledgement_form)
         content_link = item.select_one('a[data-obscene-word-target="content"]')
         if content_link is None:
             raise ValueError("Link not found")
@@ -172,7 +172,8 @@ class MarshmallowSession:
             message_id=message_id,
             liked=liked,
             content=content,
-            like_token=authenticity_token,
+            like_token=like_token,
+            acknowledgement_token=acknowledgement_token,
         )
         return message
 
@@ -194,6 +195,7 @@ class Message(BaseModel):
     liked: bool
     content: str
     like_token: str
+    acknowledgement_token: str
 
     @property
     def image(self) -> str:
@@ -255,10 +257,7 @@ class MessageDetail(Message):
         form = soup.select_one("#new_message_block_form")
         if form is None:
             raise ValueError("Form not found")
-        token_input = form.select_one('input[name="authenticity_token"]')
-        if token_input is None:
-            raise ValueError("Authenticity token not found")
-        authenticity_token = token_input.attrs["value"]
+        authenticity_token = parse_form_token(form)
         formdata = FormData()
         formdata.add_field("authenticity_token", authenticity_token)
         response = await marshmallow.client.post(
@@ -315,18 +314,16 @@ class MessageDetail(Message):
             raise ValueError("Form not found")
         method_input = form.select_one('input[name="_method"]')
         liked = method_input is not None and method_input.attrs["value"] == "delete"
-        token_input = form.select_one('input[name="authenticity_token"]')
-        if token_input is None:
-            raise ValueError("Authenticity token not found")
-        like_token = token_input.attrs["value"]
+        like_token = parse_form_token(form)
         answer_form = card.select_one("#new_answer")
         if answer_form is None:
             reply_token = None
         else:
-            token_input = answer_form.select_one('input[name="authenticity_token"]')
-            if token_input is None:
-                raise ValueError("Authenticity token not found")
-            reply_token = token_input.attrs["value"]
+            reply_token = parse_form_token(answer_form)
+        acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
+        if acknowledgement_form is None:
+            raise ValueError("Acknowledgement form not found")
+        acknowledgement_token = parse_form_token(acknowledgement_form)
         message = MessageDetail(
             message_id=message_id,
             liked=liked,
@@ -334,5 +331,13 @@ class MessageDetail(Message):
             content=card_content,
             like_token=like_token,
             reply_token=reply_token,
+            acknowledgement_token=acknowledgement_token,
         )
         return message
+
+
+def parse_form_token(form: bs4.Tag) -> str:
+    token_input = form.select_one('input[name="authenticity_token"]')
+    if token_input is None:
+        raise ValueError("Authenticity token not found")
+    return token_input.attrs["value"]
