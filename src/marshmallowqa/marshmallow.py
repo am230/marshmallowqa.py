@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import bs4
-from aiohttp import ClientSession, FormData
+from aiohttp import ClientSession
 from pydantic import BaseModel
 
+from .action import Action, ActionType
+from .const import BASE_HEADERS
 from .cookie import MarshmallowCookie
-
-BASE_HEADERS = {
-    "cache-control": "no-cache",
-    "pragma": "no-cache",
-    "user-agent": "am230/marshmallow.py (https://github.com/am230/marshmallow.py)",
-}
 
 
 class User(BaseModel):
@@ -21,6 +17,20 @@ class User(BaseModel):
     @property
     def url(self) -> str:
         return f"https://marshmallow-qa.com/{self.name}"
+
+
+LIKE_ACTION = ActionType(
+    name="like",
+    selector='form[action*="/like"]',
+)
+REPLY_ACTION = ActionType(
+    name="reply",
+    selector="#new_answer",
+)
+ACKNOWLEDGEMENT_ACTION = ActionType(
+    name="acknowledgement",
+    selector='form[action*="/acknowledgement"]',
+)
 
 
 class MarshmallowSession:
@@ -124,33 +134,17 @@ class MarshmallowSession:
         if content is None:
             raise ValueError("Content not found")
         card_content = content.text
-        form = card.select_one('form[action$="/like"]')
-        if form is None:
-            raise ValueError("Form not found")
-        method_input = form.select_one('input[name="_method"]')
-        liked = method_input is not None and method_input.attrs["value"] == "delete"
-        like_token = parse_form_token(form)
-        answer_form = card.select_one("#new_answer")
-        if answer_form is None:
-            reply_token = None
-        else:
-            reply_token = parse_form_token(answer_form)
-        acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
-        if acknowledgement_form is None:
-            raise ValueError("Acknowledgement form not found")
-        acknowledged = (
-            acknowledgement_form.select_one('input[name="_method"]') is not None
+        like_action = LIKE_ACTION.parse(soup)
+        reply_action = (
+            REPLY_ACTION.parse(soup) if soup.select_one("#new_answer") else None
         )
-        acknowledgement_token = parse_form_token(acknowledgement_form)
+        acknowledge_action = ACKNOWLEDGEMENT_ACTION.parse(soup)
         message = MessageDetail(
             message_id=message_id,
-            liked=liked,
-            replied=reply_token is None,
+            like_action=like_action,
             content=card_content,
-            like_token=like_token,
-            reply_token=reply_token,
-            acknowledgement_token=acknowledgement_token,
-            acknowledged=acknowledged,
+            reply_action=reply_action,
+            acknowledge_action=acknowledge_action,
         )
         return message
 
@@ -158,30 +152,17 @@ class MarshmallowSession:
         message_id = self._parse_message_id(
             item.attrs["data-obscene-word-raw-content-path-value"]
         )
-        like_form = item.select_one('form[action$="/like"]')
-        if like_form is None:
-            raise ValueError("Form not found")
-        method_input = like_form.select_one('input[name="_method"]')
-        liked = method_input is not None and method_input.attrs["value"] == "delete"
-        like_token = parse_form_token(like_form)
-        acknowledgement_form = item.select_one('form[action*="/acknowledgement"]')
-        if acknowledgement_form is None:
-            raise ValueError("Acknowledgement form not found")
-        acknowledged = (
-            acknowledgement_form.select_one('input[name="_method"]') is not None
-        )
-        acknowledgement_token = parse_form_token(acknowledgement_form)
+        like_action = LIKE_ACTION.parse(item)
+        acknowledge_action = ACKNOWLEDGEMENT_ACTION.parse(item)
         content_link = item.select_one('a[data-obscene-word-target="content"]')
         if content_link is None:
             raise ValueError("Link not found")
         content = content_link.text
         message = Message(
             message_id=message_id,
-            liked=liked,
             content=content,
-            like_token=like_token,
-            acknowledgement_token=acknowledgement_token,
-            acknowledged=acknowledged,
+            like_action=like_action,
+            acknowledge_action=acknowledge_action,
         )
         return message
 
@@ -200,58 +181,41 @@ class MarshmallowSession:
 
 class Message(BaseModel):
     message_id: str
-    liked: bool
     content: str
-    like_token: str
-    acknowledgement_token: str
-    acknowledged: bool
+    like_action: Action
+    acknowledge_action: Action
 
     @property
     def image(self) -> str:
         return f"https://media.marshmallow-qa.com/system/images/{self.message_id}.png"
+
+    @property
+    def url(self) -> str:
+        return f"https://marshmallow-qa.com/messages/{self.message_id}"
 
     async def fetch_detail(self, marshmallow: MarshmallowSession) -> MessageDetail:
         message_detail = await MessageDetail.from_id(marshmallow, self.message_id)
         return message_detail
 
     async def like(self, marshmallow: MarshmallowSession, liked: bool = True) -> None:
-        formdata = FormData()
-        formdata.add_field("authenticity_token", self.like_token)
-        if not liked:
-            formdata.add_field("_method", "delete")
-        response = await marshmallow.client.post(
-            f"https://marshmallow-qa.com/messages/{self.message_id}/like",
-            cookies=marshmallow.cookies.model_dump(by_alias=True),
-            data=formdata,
-            headers={
-                **BASE_HEADERS,
-                "x-csrf-token": marshmallow.csrf_token,
-            },
-        )
-        response.raise_for_status()
+        await self.like_action.set(marshmallow, delete=not liked)
+
+    @property
+    def liked(self) -> bool:
+        return self.like_action.delete
 
     async def acknowledge(
         self, marshmallow: MarshmallowSession, acknowledged: bool = True
     ) -> None:
-        formdata = FormData()
-        formdata.add_field("authenticity_token", self.acknowledgement_token)
-        if not acknowledged:
-            formdata.add_field("_method", "delete")
-        response = await marshmallow.client.post(
-            f"https://marshmallow-qa.com/messages/{self.message_id}/acknowledgement",
-            cookies=marshmallow.cookies.model_dump(by_alias=True),
-            data=formdata,
-            headers={
-                **BASE_HEADERS,
-                "x-csrf-token": marshmallow.csrf_token,
-            },
-        )
-        response.raise_for_status()
+        await self.acknowledge_action.set(marshmallow, delete=not acknowledged)
+
+    @property
+    def acknowledged(self) -> bool:
+        return self.acknowledge_action.delete
 
 
 class MessageDetail(Message):
-    reply_token: str | None
-    replied: bool
+    reply_action: Action | None
 
     async def block(self, marshmallow: MarshmallowSession) -> None:
         block = await marshmallow.client.get(
@@ -264,38 +228,23 @@ class MessageDetail(Message):
         form = soup.select_one("#new_message_block_form")
         if form is None:
             raise ValueError("Form not found")
-        authenticity_token = parse_form_token(form)
-        formdata = FormData()
-        formdata.add_field("authenticity_token", authenticity_token)
-        response = await marshmallow.client.post(
-            f"https://marshmallow-qa.com/messages/{self.message_id}/block",
-            cookies=marshmallow.cookies.model_dump(by_alias=True),
-            data=formdata,
-            headers={
-                **BASE_HEADERS,
-                "x-csrf-token": marshmallow.csrf_token,
-            },
-        )
-        response.raise_for_status()
+        action = Action.from_form(form)
+        await action.set(marshmallow)
 
     async def reply(self, marshmallow: MarshmallowSession, content: str) -> None:
-        formdata = FormData()
-        formdata.add_field("authenticity_token", self.reply_token)
-        formdata.add_field("answer[message_uuid]", self.message_id)
-        formdata.add_field("answer[content]", content)
-        formdata.add_field("answer[skip_tweet_confirmation]", "on")
-        formdata.add_field("destination", "the_others")
-        formdata.add_field("answer[publish_method]", "clipboard")
-        response = await marshmallow.client.post(
-            f"https://marshmallow-qa.com/messages/{self.message_id}/answers",
-            cookies=marshmallow.cookies.model_dump(by_alias=True),
-            data=formdata,
-            headers={
-                **BASE_HEADERS,
-                "x-csrf-token": marshmallow.csrf_token,
+        if self.reply_action is None:
+            raise ValueError("Reply action not found")
+        await self.reply_action.set(
+            marshmallow,
+            delete=False,
+            data={
+                "answer[message_uuid]": self.message_id,
+                "answer[content]": content,
+                "answer[skip_tweet_confirmation]": "on",
+                "destination": "the_others",
+                "answer[publish_method]": "clipboard",
             },
         )
-        response.raise_for_status()
 
     @classmethod
     async def from_id(
@@ -316,39 +265,16 @@ class MessageDetail(Message):
         if content is None:
             raise ValueError("Content not found")
         card_content = content.text
-        form = card.select_one('form[action$="/like"]')
-        if form is None:
-            raise ValueError("Form not found")
-        method_input = form.select_one('input[name="_method"]')
-        liked = method_input is not None and method_input.attrs["value"] == "delete"
-        like_token = parse_form_token(form)
-        answer_form = card.select_one("#new_answer")
-        if answer_form is None:
-            reply_token = None
-        else:
-            reply_token = parse_form_token(answer_form)
-        acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
-        if acknowledgement_form is None:
-            raise ValueError("Acknowledgement form not found")
-        acknowledged = (
-            acknowledgement_form.select_one('input[name="_method"]') is not None
+        like_action = LIKE_ACTION.parse(soup)
+        reply_action = (
+            REPLY_ACTION.parse(soup) if soup.select_one("#new_answer") else None
         )
-        acknowledgement_token = parse_form_token(acknowledgement_form)
+        acknowledge_action = ACKNOWLEDGEMENT_ACTION.parse(soup)
         message = MessageDetail(
             message_id=message_id,
-            liked=liked,
-            replied=reply_token is None,
+            like_action=like_action,
             content=card_content,
-            like_token=like_token,
-            reply_token=reply_token,
-            acknowledgement_token=acknowledgement_token,
-            acknowledged=acknowledged,
+            reply_action=reply_action,
+            acknowledge_action=acknowledge_action,
         )
         return message
-
-
-def parse_form_token(form: bs4.Tag) -> str:
-    token_input = form.select_one('input[name="authenticity_token"]')
-    if token_input is None:
-        raise ValueError("Authenticity token not found")
-    return token_input.attrs["value"]
