@@ -138,6 +138,9 @@ class MarshmallowSession:
         acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
         if acknowledgement_form is None:
             raise ValueError("Acknowledgement form not found")
+        acknowledged = (
+            acknowledgement_form.select_one('input[name="_method"]') is not None
+        )
         acknowledgement_token = parse_form_token(acknowledgement_form)
         message = MessageDetail(
             message_id=message_id,
@@ -147,6 +150,7 @@ class MarshmallowSession:
             like_token=like_token,
             reply_token=reply_token,
             acknowledgement_token=acknowledgement_token,
+            acknowledged=acknowledged,
         )
         return message
 
@@ -163,6 +167,9 @@ class MarshmallowSession:
         acknowledgement_form = item.select_one('form[action*="/acknowledgement"]')
         if acknowledgement_form is None:
             raise ValueError("Acknowledgement form not found")
+        acknowledged = (
+            acknowledgement_form.select_one('input[name="_method"]') is not None
+        )
         acknowledgement_token = parse_form_token(acknowledgement_form)
         content_link = item.select_one('a[data-obscene-word-target="content"]')
         if content_link is None:
@@ -174,6 +181,7 @@ class MarshmallowSession:
             content=content,
             like_token=like_token,
             acknowledgement_token=acknowledgement_token,
+            acknowledged=acknowledged,
         )
         return message
 
@@ -196,6 +204,7 @@ class Message(BaseModel):
     content: str
     like_token: str
     acknowledgement_token: str
+    acknowledged: bool
 
     @property
     def image(self) -> str:
@@ -205,13 +214,11 @@ class Message(BaseModel):
         message_detail = await MessageDetail.from_id(marshmallow, self.message_id)
         return message_detail
 
-    async def like(self, marshmallow: MarshmallowSession) -> None:
+    async def like(self, marshmallow: MarshmallowSession, liked: bool = True) -> None:
         formdata = FormData()
-        formdata.add_field("_method", "delete")
-        formdata.add_field(
-            "authenticity_token",
-            self.like_token,
-        )
+        formdata.add_field("authenticity_token", self.like_token)
+        if not liked:
+            formdata.add_field("_method", "delete")
         response = await marshmallow.client.post(
             f"https://marshmallow-qa.com/messages/{self.message_id}/like",
             cookies=marshmallow.cookies.model_dump(by_alias=True),
@@ -223,15 +230,15 @@ class Message(BaseModel):
         )
         response.raise_for_status()
 
-    async def unlike(self, marshmallow: MarshmallowSession) -> None:
+    async def acknowledge(
+        self, marshmallow: MarshmallowSession, acknowledged: bool = True
+    ) -> None:
         formdata = FormData()
-        formdata.add_field("_method", "delete")
-        formdata.add_field(
-            "authenticity_token",
-            self.like_token,
-        )
+        formdata.add_field("authenticity_token", self.acknowledgement_token)
+        if not acknowledged:
+            formdata.add_field("_method", "delete")
         response = await marshmallow.client.post(
-            f"https://marshmallow-qa.com/messages/{self.message_id}/like",
+            f"https://marshmallow-qa.com/messages/{self.message_id}/acknowledgement",
             cookies=marshmallow.cookies.model_dump(by_alias=True),
             data=formdata,
             headers={
@@ -323,6 +330,9 @@ class MessageDetail(Message):
         acknowledgement_form = card.select_one('form[action*="/acknowledgement"]')
         if acknowledgement_form is None:
             raise ValueError("Acknowledgement form not found")
+        acknowledged = (
+            acknowledgement_form.select_one('input[name="_method"]') is not None
+        )
         acknowledgement_token = parse_form_token(acknowledgement_form)
         message = MessageDetail(
             message_id=message_id,
@@ -332,6 +342,7 @@ class MessageDetail(Message):
             like_token=like_token,
             reply_token=reply_token,
             acknowledgement_token=acknowledgement_token,
+            acknowledged=acknowledged,
         )
         return message
 
