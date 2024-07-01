@@ -1,6 +1,6 @@
 [project]
 name = "marshmallowqa.py"
-version = "0.2.1"
+version = "0.3.0"
 description = "Add your description here"
 authors = [
     { name = "2.30am", email = "111672334+am230@users.noreply.github.com" },
