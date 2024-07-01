@@ -23,7 +23,7 @@ class User(BaseModel):
         return f"https://marshmallow-qa.com/{self.name}"
 
 
-class Marshmallow:
+class MarshmallowSession:
     def __init__(
         self,
         client: ClientSession,
@@ -39,7 +39,7 @@ class Marshmallow:
         cls,
         cookies: MarshmallowCookie,
         client: ClientSession | None = None,
-    ) -> Marshmallow:
+    ) -> MarshmallowSession:
         client = client or ClientSession()
         response = await client.get(
             "https://marshmallow-qa.com/messages",
@@ -109,6 +109,48 @@ class Marshmallow:
             messages.append(message)
         return messages
 
+    async def fetch_message_by_id(self, message_id: str) -> Message:
+        response = await self.client.get(
+            f"https://marshmallow-qa.com/messages/{message_id}",
+            cookies=self.cookies.model_dump(by_alias=True),
+            headers=BASE_HEADERS,
+        )
+        response.raise_for_status()
+        soup = bs4.BeautifulSoup(await response.text(), "html.parser")
+        card = soup.select_one(".card")
+        if card is None:
+            raise ValueError("Card not found")
+        content = card.select_one('[data-obscene-word-target="content"]')
+        if content is None:
+            raise ValueError("Content not found")
+        card_content = content.text
+        form = card.select_one('form[action$="/like"]')
+        if form is None:
+            raise ValueError("Form not found")
+        method_input = form.select_one('input[name="_method"]')
+        liked = method_input is not None and method_input.attrs["value"] == "delete"
+        token_input = form.select_one('input[name="authenticity_token"]')
+        if token_input is None:
+            raise ValueError("Authenticity token not found")
+        like_token = token_input.attrs["value"]
+        answer_form = card.select_one("#new_answer")
+        if answer_form is None:
+            reply_token = None
+        else:
+            token_input = answer_form.select_one('input[name="authenticity_token"]')
+            if token_input is None:
+                raise ValueError("Authenticity token not found")
+            reply_token = token_input.attrs["value"]
+        message = MessageDetail(
+            message_id=message_id,
+            liked=liked,
+            replied=reply_token is None,
+            content=card_content,
+            like_token=like_token,
+            reply_token=reply_token,
+        )
+        return message
+
     def _parse_message_data(self, item: bs4.Tag) -> Message:
         message_id = self._parse_message_id(
             item.attrs["data-obscene-word-raw-content-path-value"]
@@ -157,11 +199,11 @@ class Message(BaseModel):
     def image(self) -> str:
         return f"https://media.marshmallow-qa.com/system/images/{self.message_id}.png"
 
-    async def fetch_detail(self, marshmallow: Marshmallow) -> MessageDetail:
+    async def fetch_detail(self, marshmallow: MarshmallowSession) -> MessageDetail:
         message_detail = await MessageDetail.from_id(marshmallow, self.message_id)
         return message_detail
 
-    async def like(self, marshmallow: Marshmallow) -> None:
+    async def like(self, marshmallow: MarshmallowSession) -> None:
         formdata = FormData()
         formdata.add_field("_method", "delete")
         formdata.add_field(
@@ -179,7 +221,7 @@ class Message(BaseModel):
         )
         response.raise_for_status()
 
-    async def dislike(self, marshmallow: Marshmallow) -> None:
+    async def unlike(self, marshmallow: MarshmallowSession) -> None:
         formdata = FormData()
         formdata.add_field("_method", "delete")
         formdata.add_field(
@@ -202,7 +244,7 @@ class MessageDetail(Message):
     reply_token: str | None
     replied: bool
 
-    async def block(self, marshmallow: Marshmallow) -> None:
+    async def block(self, marshmallow: MarshmallowSession) -> None:
         block = await marshmallow.client.get(
             f"https://marshmallow-qa.com/messages/{self.message_id}/block/new",
             cookies=marshmallow.cookies.model_dump(by_alias=True),
@@ -230,7 +272,7 @@ class MessageDetail(Message):
         )
         response.raise_for_status()
 
-    async def reply(self, marshmallow: Marshmallow, content: str) -> None:
+    async def reply(self, marshmallow: MarshmallowSession, content: str) -> None:
         formdata = FormData()
         formdata.add_field("authenticity_token", self.reply_token)
         formdata.add_field("answer[message_uuid]", self.message_id)
@@ -250,7 +292,9 @@ class MessageDetail(Message):
         response.raise_for_status()
 
     @classmethod
-    async def from_id(cls, marshmallow: Marshmallow, message_id: str) -> MessageDetail:
+    async def from_id(
+        cls, marshmallow: MarshmallowSession, message_id: str
+    ) -> MessageDetail:
         url = f"https://marshmallow-qa.com/messages/{message_id}"
         response = await marshmallow.client.get(
             url,

@@ -1,14 +1,14 @@
 import asyncio
 
-from marshmallowqa import Marshmallow, retrieve_cookies
+from marshmallowqa import MarshmallowSession, retrieve_cookies
 
 
 async def main():
     cookies = retrieve_cookies(domain="marshmallow-qa.com")
-    marshmallow = await Marshmallow.from_cookies(
+    session = await MarshmallowSession.from_cookies(
         cookies=cookies["edge"],
     )
-    user = await marshmallow.fetch_user()
+    user = await session.fetch_user()
     print(user)
 
 

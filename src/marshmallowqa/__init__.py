@@ -1,8 +1,8 @@
 from .cookie import MarshmallowCookie, retrieve_cookies
-from .marshmallow import Marshmallow, Message, MessageDetail, User
+from .marshmallow import MarshmallowSession, Message, MessageDetail, User
 
 __all__ = [
-    "Marshmallow",
+    "MarshmallowSession",
     "Message",
     "MessageDetail",
     "MarshmallowCookie",

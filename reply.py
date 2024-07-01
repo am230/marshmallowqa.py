@@ -10,7 +10,7 @@ async def main():
     )
     messages = await marshmallow.fetch_messages()
     detail = await messages[0].fetch_detail(marshmallow)
-    await detail.reply(marshmallow, "あいうえお")
+    await detail.reply(marshmallow, "Hello!")
 
 
 if __name__ == "__main__":
