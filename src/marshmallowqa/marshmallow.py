@@ -231,6 +231,10 @@ class Message(BaseModel):
 class MessageDetail(Message):
     reply_action: Action | None
 
+    @property
+    def replied(self) -> bool:
+        return self.reply_action is not None
+
     async def reply(self, marshmallow: MarshmallowSession, content: str) -> None:
         if self.reply_action is None:
             raise ValueError("Reply action not found")
