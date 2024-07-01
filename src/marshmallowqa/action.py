@@ -45,7 +45,8 @@ class Action(BaseModel):
         if delete:
             formdata.add_field("_method", "delete")
         if data is not None:
-            formdata.add_fields(data)
+            for key, value in data.items():
+                formdata.add_field(key, value)
         response = await marshmallow.client.post(
             f"https://marshmallow-qa.com{self.action}",
             cookies=marshmallow.cookies.model_dump(by_alias=True),
