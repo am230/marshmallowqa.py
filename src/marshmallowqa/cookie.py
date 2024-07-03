@@ -27,9 +27,9 @@ if sys.platform == "darwin":
 
 
 class MarshmallowCookie(BaseModel):
-    bid: str
-    no_web_push_promotion: str
-    web_push_subscription: str
+    bid: str | None = None
+    no_web_push_promotion: str | None = None
+    web_push_subscription: str | None = None
     marshmallow_session: str = Field(
         alias="_marshmallow_session", serialization_alias="_marshmallow_session"
     )
