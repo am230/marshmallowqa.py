@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import bs4
 from aiohttp import ClientSession
 from pydantic import BaseModel
@@ -7,6 +10,7 @@ from pydantic import BaseModel
 from .action import Action, ActionType
 from .const import BASE_HEADERS
 from .cookie import MarshmallowCookie
+from .errors import MarshmallowError, MarshmallowLoginError
 
 
 class User(BaseModel):
@@ -60,7 +64,9 @@ class MarshmallowSession:
         soup = bs4.BeautifulSoup(await response.text(), "html.parser")
         csrf_token = soup.select_one('meta[name="csrf-token"]')
         if csrf_token is None:
-            raise ValueError("CSRF token not found")
+            if soup.select_one("turbo-stream"):
+                raise MarshmallowLoginError("CSRF token not found (Maybe logged out)")
+            raise MarshmallowLoginError("CSRF token not found")
 
         return cls(
             client=client,
