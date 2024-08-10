@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import sys
 
 import rookiepy
@@ -42,9 +43,12 @@ class MarshmallowCookie(BaseModel):
         return cls.model_validate(cookies_dict)
 
 
-def retrieve_cookies(domain: str) -> dict[str, MarshmallowCookie]:
+def retrieve_cookies(
+    domain: str, concurrent: bool = True
+) -> dict[str, MarshmallowCookie]:
     result: dict[str, MarshmallowCookie] = {}
-    for browser in BROWSERS:
+
+    def get_cookies(browser: str):
         try:
             cookie_list = BROWSERS[browser](domains=[domain])
             result[browser] = MarshmallowCookie.from_cookie_list(cookie_list)
@@ -52,4 +56,11 @@ def retrieve_cookies(domain: str) -> dict[str, MarshmallowCookie]:
             pass
         except RuntimeError:
             pass
+
+    if concurrent:
+        with ThreadPoolExecutor() as executor:
+            executor.map(get_cookies, BROWSERS.keys())
+    else:
+        for browser in BROWSERS.keys():
+            get_cookies(browser)
     return result
