@@ -17,6 +17,7 @@ class User(BaseModel):
     name: str
     screen_name: str
     image: str
+    premium: bool
 
     @property
     def url(self) -> str:
@@ -102,10 +103,29 @@ class MarshmallowSession:
         image = form.select_one("picture > img")
         if image is None:
             raise ValueError("Image not found")
+
+        premium_response = await self.client.get(
+            "https://marshmallow-qa.com/settings/premium",
+            cookies=self.cookies.model_dump(by_alias=True),
+            headers=BASE_HEADERS,
+        )
+        premium_response.raise_for_status()
+        premium_soup = bs4.BeautifulSoup(await premium_response.text(), "html.parser")
+        premium_setting = premium_soup.select_one("#premium-subscription-setting")
+        if premium_setting is None:
+            raise ValueError("Premium setting not found")
+        has_checkout_form = premium_setting.select_one(
+            'form[action^="/stripe/checkout/sessions?price="]'
+        )
+        has_withdrawal_button = premium_setting.select_one(
+            'button[data-bs-target="#premium-withdrawal-confirmation"]'
+        )
+        is_premium = bool(has_withdrawal_button and not has_checkout_form)
         user = User(
             name=user_id,
             screen_name=screen_name,
             image=image.attrs["src"],
+            premium=is_premium,
         )
         return user
 
