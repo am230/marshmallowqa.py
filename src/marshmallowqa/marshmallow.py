@@ -101,8 +101,14 @@ class MarshmallowSession:
             raise ValueError("Name input not found")
         screen_name = name_input.attrs["value"]
         image = form.select_one("picture > img")
-        if image is None:
+        source = form.select_one("picture > source")
+        if image is None or source is None:
             raise ValueError("Image not found")
+        if source.attrs.get("srcset"):
+            source_urls = source.attrs["srcset"].split(",")
+            image_url = source_urls[0].split(" ")[0]
+        else:
+            image_url = source.attrs["src"]
 
         premium_response = await self.client.get(
             "https://marshmallow-qa.com/settings/premium",
@@ -124,7 +130,7 @@ class MarshmallowSession:
         user = User(
             name=user_id,
             screen_name=screen_name,
-            image=image.attrs["src"],
+            image=image_url,
             premium=is_premium,
         )
         return user
